@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, ReactNode } from 'react';
 import { User, AuthState } from '../types/auth';
 
 interface AuthContextType extends AuthState {
   login: (username: string, isAdmin: boolean, openaiApiKey?: string) => void;
   logout: () => void;
   setOpenaiApiKey: (key: string) => void;
+  setLoading: (loading: boolean) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -16,27 +17,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isLoading: true,
     openaiApiKey: null,
   });
-
-  useEffect(() => {
-    const storedUser = localStorage.getItem('auth_user');
-    const storedApiKey = localStorage.getItem('openai_api_key');
-
-    if (storedUser) {
-      try {
-        const user = JSON.parse(storedUser);
-        setAuthState({
-          user,
-          isAuthenticated: true,
-          isLoading: false,
-          openaiApiKey: storedApiKey,
-        });
-      } catch {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-      }
-    } else {
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-    }
-  }, []);
 
   const login = (username: string, isAdmin: boolean, openaiApiKey?: string) => {
     const user: User = { username, isAdmin };
@@ -69,8 +49,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuthState(prev => ({ ...prev, openaiApiKey: key }));
   };
 
+  const setLoading = (loading: boolean) => {
+    setAuthState(prev => ({ ...prev, isLoading: loading }));
+  };
+
   return (
-    <AuthContext.Provider value={{ ...authState, login, logout, setOpenaiApiKey }}>
+    <AuthContext.Provider value={{ ...authState, login, logout, setOpenaiApiKey, setLoading }}>
       {children}
     </AuthContext.Provider>
   );

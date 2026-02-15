@@ -22,24 +22,46 @@ type Tab = 'basics' | 'ip-theory' | 'home' | 'trace' | 'quiz' | 'stats' | 'priva
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('basics');
   const [selectedHop, setSelectedHop] = useState<NetworkHop | undefined>();
-  const { user, isAuthenticated, isLoading, login, logout, openaiApiKey } = useAuth();
+  const { user, isAuthenticated, isLoading, login, logout, openaiApiKey, setLoading } = useAuth();
   const { loading, error, routeData, traceRoute, hasAPIKey, isInitialized } = useAINetworkTrace();
 
   useEffect(() => {
     const initAuth = async () => {
-      if (authService.isRunningInIframe()) {
+      const isInIframe = authService.isRunningInIframe();
+
+      if (isInIframe) {
         const authResult = await authService.attemptAutoLogin();
+
         if (authResult.authenticated && authResult.username) {
           login(authResult.username, authResult.isAdmin || false, authResult.openaiApiKey);
           if (authResult.openaiApiKey) {
             ApiKeyCache.apiKey = authResult.openaiApiKey;
           }
+        } else {
+          setLoading(false);
+        }
+      } else {
+        const storedUser = localStorage.getItem('auth_user');
+        const storedApiKey = localStorage.getItem('openai_api_key');
+
+        if (storedUser) {
+          try {
+            const user = JSON.parse(storedUser);
+            login(user.username, user.isAdmin, storedApiKey || undefined);
+            if (storedApiKey) {
+              ApiKeyCache.apiKey = storedApiKey;
+            }
+          } catch {
+            setLoading(false);
+          }
+        } else {
+          setLoading(false);
         }
       }
     };
 
     initAuth();
-  }, [login]);
+  }, [login, setLoading]);
 
   useEffect(() => {
     if (openaiApiKey) {
