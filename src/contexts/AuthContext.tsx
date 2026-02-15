@@ -36,6 +36,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const logout = () => {
     localStorage.removeItem('auth_user');
     localStorage.removeItem('openai_api_key');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('username');
+    localStorage.removeItem('isAdmin');
+    localStorage.removeItem('OPENAI_API_KEY');
+    localStorage.removeItem('SUPABASE_URL');
+    localStorage.removeItem('SUPABASE_ANON_KEY');
     setAuthState({
       user: null,
       isAuthenticated: false,

@@ -28,45 +28,19 @@ function App() {
   useEffect(() => {
     const initAuth = async () => {
       console.log('[App] Initializing authentication');
-      const isInIframe = authService.isRunningInIframe();
-      console.log('[App] Is in iframe:', isInIframe);
 
-      if (isInIframe) {
-        console.log('[App] Attempting iframe auto-login');
-        const authResult = await authService.attemptAutoLogin();
-        console.log('[App] Auto-login result:', authResult);
+      const authResult = await authService.attemptAutoLogin();
+      console.log('[App] Auto-login result:', authResult);
 
-        if (authResult.authenticated && authResult.username) {
-          console.log('[App] Auto-login successful, logging in user');
-          login(authResult.username, authResult.isAdmin || false, authResult.openaiApiKey);
-          if (authResult.openaiApiKey) {
-            ApiKeyCache.apiKey = authResult.openaiApiKey;
-          }
-        } else {
-          console.log('[App] Auto-login failed, showing login screen');
-          setLoading(false);
+      if (authResult.authenticated && authResult.username) {
+        console.log('[App] Auto-login successful, logging in user:', authResult.username);
+        login(authResult.username, authResult.isAdmin || false, authResult.openaiApiKey);
+        if (authResult.openaiApiKey) {
+          ApiKeyCache.apiKey = authResult.openaiApiKey;
         }
       } else {
-        console.log('[App] Not in iframe, checking localStorage');
-        const storedUser = localStorage.getItem('auth_user');
-        const storedApiKey = localStorage.getItem('openai_api_key');
-
-        if (storedUser) {
-          try {
-            const user = JSON.parse(storedUser);
-            console.log('[App] Restoring session from localStorage:', user.username);
-            login(user.username, user.isAdmin, storedApiKey || undefined);
-            if (storedApiKey) {
-              ApiKeyCache.apiKey = storedApiKey;
-            }
-          } catch {
-            console.log('[App] Failed to restore session');
-            setLoading(false);
-          }
-        } else {
-          console.log('[App] No stored session, showing login screen');
-          setLoading(false);
-        }
+        console.log('[App] Auto-login failed, showing login screen');
+        setLoading(false);
       }
     };
 
@@ -87,6 +61,12 @@ function App() {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('username');
+    localStorage.removeItem('isAdmin');
+    localStorage.removeItem('OPENAI_API_KEY');
+    localStorage.removeItem('SUPABASE_URL');
+    localStorage.removeItem('SUPABASE_ANON_KEY');
     ApiKeyCache.clear();
     logout();
   };

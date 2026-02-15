@@ -14,24 +14,30 @@ export class AuthService {
     );
   }
 
-  async validateAuthToken(token: string): Promise<{ username: string; isAdmin: boolean } | null> {
+  async validateAuthToken(token: string, supabaseUrl: string, supabaseAnonKey: string): Promise<{ username: string; isAdmin: boolean } | null> {
     try {
-      const { data, error } = await this.supabase
-        .from('auth_tokens')
-        .select('username, is_admin, expires_at')
-        .eq('token', token)
-        .gt('expires_at', new Date().toISOString())
-        .maybeSingle();
+      const response = await fetch(
+        `${supabaseUrl}/rest/v1/auth_tokens?token=eq.${token}&expires_at=gt.${new Date().toISOString()}&select=username,is_admin`,
+        {
+          headers: {
+            'apikey': supabaseAnonKey,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
 
-      if (error || !data) {
-        return null;
+      const tokens = await response.json();
+
+      if (tokens && tokens.length > 0) {
+        return {
+          username: tokens[0].username,
+          isAdmin: tokens[0].is_admin,
+        };
       }
 
-      return {
-        username: data.username,
-        isAdmin: data.is_admin,
-      };
-    } catch {
+      return null;
+    } catch (error) {
+      console.error('[Auth] Token validation error:', error);
       return null;
     }
   }
@@ -70,44 +76,7 @@ export class AuthService {
   }
 
   isRunningInIframe(): boolean {
-    try {
-      return window.self !== window.top;
-    } catch {
-      return true;
-    }
-  }
-
-  async requestIframeAuth(): Promise<IframeAuthData | null> {
-    return new Promise((resolve) => {
-      const isInIframe = this.isRunningInIframe();
-      console.log('[Auth] Running in iframe:', isInIframe);
-
-      if (!isInIframe) {
-        console.log('[Auth] Not in iframe, skipping auto-login');
-        resolve(null);
-        return;
-      }
-
-      const handleMessage = (event: MessageEvent) => {
-        console.log('[Auth] Received message:', event.data);
-
-        if (event.data.type === 'API_VALUES_RESPONSE') {
-          console.log('[Auth] Got API_VALUES_RESPONSE');
-          window.removeEventListener('message', handleMessage);
-          resolve(event.data.data);
-        }
-      };
-
-      window.addEventListener('message', handleMessage);
-      console.log('[Auth] Requesting API values from parent');
-      window.parent.postMessage({ type: 'REQUEST_API_VALUES' }, '*');
-
-      setTimeout(() => {
-        console.log('[Auth] Timeout reached, no response from parent');
-        window.removeEventListener('message', handleMessage);
-        resolve(null);
-      }, 3000);
-    });
+    return window.parent !== window;
   }
 
   async attemptAutoLogin(): Promise<{
@@ -116,45 +85,83 @@ export class AuthService {
     isAdmin?: boolean;
     openaiApiKey?: string;
   }> {
-    console.log('[Auth] Attempting auto-login');
-    const iframeData = await this.requestIframeAuth();
+    return new Promise((resolve) => {
+      console.log('[Auth] Attempting auto-login');
+      console.log('[Auth] Running in iframe:', this.isRunningInIframe());
 
-    if (!iframeData) {
-      console.log('[Auth] No iframe data received');
-      return { authenticated: false };
-    }
+      const messageHandler = async (event: MessageEvent) => {
+        console.log('[Auth] Received message:', event.data);
 
-    console.log('[Auth] Iframe data received:', {
-      hasAuthToken: !!iframeData.authToken,
-      hasOpenAI: !!iframeData.OPENAI_API_KEY,
-      username: iframeData.username,
-    });
+        if (event.data.type === 'API_VALUES_RESPONSE') {
+          console.log('[Auth] Got API_VALUES_RESPONSE');
+          window.removeEventListener('message', messageHandler);
 
-    const supabaseUrl = iframeData.SUPABASE_URL || FALLBACK_SUPABASE_URL;
-    const supabaseAnonKey = iframeData.SUPABASE_ANON_KEY || FALLBACK_ANON_KEY;
+          const { authToken, username, isAdmin, OPENAI_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY } = event.data.data;
 
-    const authService = new AuthService(supabaseUrl, supabaseAnonKey);
+          if (authToken) localStorage.setItem('authToken', authToken);
+          if (username) localStorage.setItem('username', username);
+          if (isAdmin !== undefined) localStorage.setItem('isAdmin', String(isAdmin));
+          if (OPENAI_API_KEY) localStorage.setItem('OPENAI_API_KEY', OPENAI_API_KEY);
+          if (SUPABASE_URL) localStorage.setItem('SUPABASE_URL', SUPABASE_URL);
+          if (SUPABASE_ANON_KEY) localStorage.setItem('SUPABASE_ANON_KEY', SUPABASE_ANON_KEY);
 
-    if (iframeData.authToken) {
-      console.log('[Auth] Validating auth token');
-      const validatedUser = await authService.validateAuthToken(iframeData.authToken);
+          if (authToken && SUPABASE_URL && SUPABASE_ANON_KEY) {
+            console.log('[Auth] Validating auth token');
+            try {
+              const validatedUser = await this.validateAuthToken(authToken, SUPABASE_URL, SUPABASE_ANON_KEY);
 
-      if (validatedUser) {
-        console.log('[Auth] Token validated successfully:', validatedUser);
-        return {
-          authenticated: true,
-          username: validatedUser.username,
-          isAdmin: validatedUser.isAdmin,
-          openaiApiKey: iframeData.OPENAI_API_KEY,
-        };
-      } else {
-        console.log('[Auth] Token validation failed');
+              if (validatedUser) {
+                console.log('[Auth] Token validated successfully:', validatedUser);
+                resolve({
+                  authenticated: true,
+                  username: validatedUser.username,
+                  isAdmin: validatedUser.isAdmin,
+                  openaiApiKey: OPENAI_API_KEY,
+                });
+                return;
+              } else {
+                console.log('[Auth] Token validation failed');
+              }
+            } catch (error) {
+              console.error('[Auth] Token validation error:', error);
+            }
+          }
+
+          console.log('[Auth] Authentication failed');
+          resolve({ authenticated: false });
+        }
+      };
+
+      window.addEventListener('message', messageHandler);
+
+      if (this.isRunningInIframe()) {
+        console.log('[Auth] Requesting API values from parent');
+        window.parent.postMessage({ type: 'REQUEST_API_VALUES' }, '*');
       }
-    } else {
-      console.log('[Auth] No auth token in iframe data');
-    }
 
-    return { authenticated: false };
+      setTimeout(() => {
+        console.log('[Auth] Timeout reached');
+        window.removeEventListener('message', messageHandler);
+
+        const storedToken = localStorage.getItem('authToken');
+        const storedUsername = localStorage.getItem('username');
+        const storedIsAdmin = localStorage.getItem('isAdmin') === 'true';
+        const storedOpenAI = localStorage.getItem('OPENAI_API_KEY');
+
+        if (storedToken && storedUsername) {
+          console.log('[Auth] Using stored credentials:', storedUsername);
+          resolve({
+            authenticated: true,
+            username: storedUsername,
+            isAdmin: storedIsAdmin,
+            openaiApiKey: storedOpenAI || undefined,
+          });
+        } else {
+          console.log('[Auth] No stored credentials');
+          resolve({ authenticated: false });
+        }
+      }, 2000);
+    });
   }
 }
 
