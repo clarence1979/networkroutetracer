@@ -3,16 +3,18 @@ import { Globe3DContainer } from './components/Globe3D/Globe3DContainer';
 import { DomainInput } from './components/UI/DomainInput';
 import { RouteInfoPanel } from './components/UI/RouteInfoPanel';
 import { StatsDashboard } from './components/UI/StatsDashboard';
-import { APIKeyModal } from './components/UI/APIKeyModal';
 import { NetworkingBasics } from './components/Educational/NetworkingBasics';
 import { InteractiveQuiz } from './components/Educational/InteractiveQuiz';
 import { HomeNetworkVisualization } from './components/HomeNetwork/HomeNetworkVisualization';
 import { PrivacyPolicy } from './components/Legal/PrivacyPolicy';
 import { IPAddressTheory } from './components/Educational/IPAddressTheory';
+import { LoginScreen } from './components/Auth/LoginScreen';
 import { useAINetworkTrace } from './hooks/useAINetworkTrace';
 import { ApiKeyCache } from './services/apiKeyCache';
+import { authService } from './services/authService';
+import { useAuth } from './contexts/AuthContext';
 import { NetworkHop } from './types/networking';
-import { Network, BookOpen, Brain, BarChart3, Wifi, Settings } from 'lucide-react';
+import { Network, BookOpen, Brain, BarChart3, Wifi, Settings, LogOut, Loader2 } from 'lucide-react';
 import { Server } from 'lucide-react';
 
 type Tab = 'basics' | 'ip-theory' | 'home' | 'trace' | 'quiz' | 'stats' | 'privacy';
@@ -20,41 +22,41 @@ type Tab = 'basics' | 'ip-theory' | 'home' | 'trace' | 'quiz' | 'stats' | 'priva
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('basics');
   const [selectedHop, setSelectedHop] = useState<NetworkHop | undefined>();
-  const [showAPIKeyModal, setShowAPIKeyModal] = useState(false);
-  const [apiKey, setApiKey] = useState(ApiKeyCache.apiKey);
-  const { loading, error, routeData, traceRoute, updateAPIKey, hasAPIKey, isInitialized } = useAINetworkTrace();
+  const { user, isAuthenticated, isLoading, login, logout, openaiApiKey } = useAuth();
+  const { loading, error, routeData, traceRoute, hasAPIKey, isInitialized } = useAINetworkTrace();
 
-  // Handle API key from parent application (iframe communication)
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlApiKey = urlParams.get('apiKey');
+    const initAuth = async () => {
+      if (authService.isRunningInIframe()) {
+        const authResult = await authService.attemptAutoLogin();
+        if (authResult.authenticated && authResult.username) {
+          login(authResult.username, authResult.isAdmin || false, authResult.openaiApiKey);
+          if (authResult.openaiApiKey) {
+            ApiKeyCache.apiKey = authResult.openaiApiKey;
+          }
+        }
+      }
+    };
 
-    if (urlApiKey) {
-      ApiKeyCache.apiKey = urlApiKey;
+    initAuth();
+  }, [login]);
 
-      const url = new URL(window.location.href);
-      url.searchParams.delete('apiKey');
-      window.history.replaceState({}, document.title, url.toString());
-    } else if (!urlApiKey && urlParams.has('apiKey')) {
-      ApiKeyCache.clear();
-
-      const url = new URL(window.location.href);
-      url.searchParams.delete('apiKey');
-      window.history.replaceState({}, document.title, url.toString());
+  useEffect(() => {
+    if (openaiApiKey) {
+      ApiKeyCache.apiKey = openaiApiKey;
     }
-  }, []);
+  }, [openaiApiKey]);
 
-  // Subscribe to global API key changes
-  useEffect(() => {
-    const unsubscribe = ApiKeyCache.subscribe((newApiKey) => {
-      setApiKey(newApiKey);
-    });
+  const handleLoginSuccess = (username: string, isAdmin: boolean, openaiKey?: string) => {
+    login(username, isAdmin, openaiKey);
+    if (openaiKey) {
+      ApiKeyCache.apiKey = openaiKey;
+    }
+  };
 
-    return unsubscribe;
-  }, []);
-
-  const handleAPIKeyChange = (newApiKey: string) => {
-    ApiKeyCache.apiKey = newApiKey;
+  const handleLogout = () => {
+    ApiKeyCache.clear();
+    logout();
   };
 
   const handleHopSelect = (hop: NetworkHop) => {
@@ -71,9 +73,23 @@ function App() {
     { id: 'privacy', label: 'Privacy Policy', icon: Settings }
   ] as const;
 
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-sky-100 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-600">Initializing...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Header */}
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-sky-100">
       <header className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
           <div className="flex flex-col sm:flex-row justify-between items-center py-3 sm:h-16">
@@ -93,12 +109,12 @@ function App() {
             <div className="flex items-center space-x-2 sm:space-x-4">
               <form action="https://www.paypal.com/donate" method="post" target="_top" className="inline-block">
                 <input type="hidden" name="hosted_button_id" value="PSXE6LDM3ZJDC" />
-                <input 
-                  type="image" 
-                  src="https://www.paypalobjects.com/en_AU/i/btn/btn_donateCC_LG.gif" 
-                  border="0" 
-                  name="submit" 
-                  title="PayPal - The safer, easier way to pay online!" 
+                <input
+                  type="image"
+                  src="https://www.paypalobjects.com/en_AU/i/btn/btn_donateCC_LG.gif"
+                  border="0"
+                  name="submit"
+                  title="PayPal - The safer, easier way to pay online!"
                   alt="Donate with PayPal button"
                   className="h-8 sm:h-12"
                 />
@@ -106,30 +122,33 @@ function App() {
               </form>
               <div className="flex items-center ml-2 sm:ml-4">
                 <span className="text-xs sm:text-sm text-gray-600 mr-1 sm:mr-2 hidden sm:inline">Proudly Made By:</span>
-                <a 
-                  href="https://clarence.guru" 
-                  target="_blank" 
+                <a
+                  href="https://clarence.guru"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="hover:opacity-80 transition-opacity"
                 >
-                  <img 
-                    src="/clarence-solutions-logo.png" 
-                    alt="Clarence's Solutions" 
+                  <img
+                    src="/clarence-solutions-logo.png"
+                    alt="Clarence's Solutions"
                     className="h-6 sm:h-8"
                   />
                 </a>
               </div>
-              <div className="flex items-center ml-2 sm:ml-4">
+              <div className="flex items-center ml-2 sm:ml-4 space-x-2">
+                <div className="flex items-center space-x-2 bg-gray-100 rounded-lg px-3 py-2">
+                  <span className="text-sm text-gray-700">{user?.username}</span>
+                  <div className="relative">
+                    <Settings className="h-6 w-6 text-green-600" />
+                    <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-green-500" />
+                  </div>
+                </div>
                 <button
-                  onClick={() => setShowAPIKeyModal(true)}
-                  className="relative p-2 text-gray-600 hover:text-gray-800 transition-colors"
-                  title="API Key Settings"
+                  onClick={handleLogout}
+                  className="p-2 text-gray-600 hover:text-red-600 transition-colors"
+                  title="Logout"
                 >
-                  <Settings className="h-6 w-6" />
-                  {/* Status indicator dot */}
-                  <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ${
-                    hasAPIKey ? 'bg-green-500' : 'bg-red-500'
-                  }`} />
+                  <LogOut className="h-6 w-6" />
                 </button>
               </div>
             </div>
@@ -137,7 +156,6 @@ function App() {
         </div>
       </header>
 
-      {/* Navigation Tabs */}
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8">
           <div className="flex overflow-x-auto space-x-2 sm:space-x-8 pb-2 sm:pb-0">
@@ -159,7 +177,6 @@ function App() {
         </div>
       </nav>
 
-      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-4 sm:py-8">
         {activeTab === 'basics' && (
           <div className="max-w-6xl mx-auto px-2 sm:px-0">
@@ -181,7 +198,6 @@ function App() {
 
         {activeTab === 'trace' && (
           <div className="grid lg:grid-cols-3 gap-4 lg:gap-8">
-            {/* Left Column - Controls and Info */}
             <div className="lg:col-span-1 space-y-4 lg:space-y-6">
               <DomainInput
                 onSubmit={traceRoute}
@@ -190,7 +206,7 @@ function App() {
                 disabled={!hasAPIKey}
                 isInitializing={!isInitialized}
               />
-              
+
               <RouteInfoPanel
                 routeData={routeData}
                 selectedHop={selectedHop}
@@ -198,7 +214,6 @@ function App() {
               />
             </div>
 
-            {/* Right Column - 3D Globe */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg shadow-lg overflow-hidden" style={{ height: '400px', minHeight: '300px' }}>
                 <Globe3DContainer
@@ -232,7 +247,6 @@ function App() {
         )}
       </main>
 
-      {/* Footer */}
       <footer className="bg-gray-50 border-t border-gray-200 mt-16">
         <div className="max-w-7xl mx-auto px-2 sm:px-4 lg:px-8 py-8 sm:py-12">
           <div className="grid md:grid-cols-3 gap-6 sm:gap-8">
@@ -277,14 +291,6 @@ function App() {
           </div>
         </div>
       </footer>
-
-      {/* API Key Modal */}
-      <APIKeyModal
-        isOpen={showAPIKeyModal}
-        onClose={() => setShowAPIKeyModal(false)}
-        onAPIKeyChange={handleAPIKeyChange}
-        currentAPIKey={ApiKeyCache.apiKey}
-      />
     </div>
   );
 }
