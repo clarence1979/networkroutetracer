@@ -79,26 +79,34 @@ export class AuthService {
 
   async requestIframeAuth(): Promise<IframeAuthData | null> {
     return new Promise((resolve) => {
-      if (!this.isRunningInIframe()) {
+      const isInIframe = this.isRunningInIframe();
+      console.log('[Auth] Running in iframe:', isInIframe);
+
+      if (!isInIframe) {
+        console.log('[Auth] Not in iframe, skipping auto-login');
         resolve(null);
         return;
       }
 
-      window.parent.postMessage({ type: 'REQUEST_API_VALUES' }, '*');
-
       const handleMessage = (event: MessageEvent) => {
+        console.log('[Auth] Received message:', event.data);
+
         if (event.data.type === 'API_VALUES_RESPONSE') {
+          console.log('[Auth] Got API_VALUES_RESPONSE');
           window.removeEventListener('message', handleMessage);
           resolve(event.data.data);
         }
       };
 
       window.addEventListener('message', handleMessage);
+      console.log('[Auth] Requesting API values from parent');
+      window.parent.postMessage({ type: 'REQUEST_API_VALUES' }, '*');
 
       setTimeout(() => {
+        console.log('[Auth] Timeout reached, no response from parent');
         window.removeEventListener('message', handleMessage);
         resolve(null);
-      }, 2000);
+      }, 3000);
     });
   }
 
@@ -108,11 +116,19 @@ export class AuthService {
     isAdmin?: boolean;
     openaiApiKey?: string;
   }> {
+    console.log('[Auth] Attempting auto-login');
     const iframeData = await this.requestIframeAuth();
 
     if (!iframeData) {
+      console.log('[Auth] No iframe data received');
       return { authenticated: false };
     }
+
+    console.log('[Auth] Iframe data received:', {
+      hasAuthToken: !!iframeData.authToken,
+      hasOpenAI: !!iframeData.OPENAI_API_KEY,
+      username: iframeData.username,
+    });
 
     const supabaseUrl = iframeData.SUPABASE_URL || FALLBACK_SUPABASE_URL;
     const supabaseAnonKey = iframeData.SUPABASE_ANON_KEY || FALLBACK_ANON_KEY;
@@ -120,16 +136,22 @@ export class AuthService {
     const authService = new AuthService(supabaseUrl, supabaseAnonKey);
 
     if (iframeData.authToken) {
+      console.log('[Auth] Validating auth token');
       const validatedUser = await authService.validateAuthToken(iframeData.authToken);
 
       if (validatedUser) {
+        console.log('[Auth] Token validated successfully:', validatedUser);
         return {
           authenticated: true,
           username: validatedUser.username,
           isAdmin: validatedUser.isAdmin,
           openaiApiKey: iframeData.OPENAI_API_KEY,
         };
+      } else {
+        console.log('[Auth] Token validation failed');
       }
+    } else {
+      console.log('[Auth] No auth token in iframe data');
     }
 
     return { authenticated: false };
