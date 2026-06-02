@@ -28,19 +28,14 @@ function App() {
 
   useEffect(() => {
     const initAuth = async () => {
-      console.log('[App] Initializing authentication');
-
       const authResult = await authService.attemptAutoLogin();
-      console.log('[App] Auto-login result:', authResult);
 
       if (authResult.authenticated && authResult.username) {
-        console.log('[App] Auto-login successful, logging in user:', authResult.username);
         login(authResult.username, authResult.isAdmin || false, authResult.openaiApiKey);
         if (authResult.openaiApiKey) {
           ApiKeyCache.apiKey = authResult.openaiApiKey;
         }
       } else {
-        console.log('[App] Auto-login failed, showing login screen');
         setLoading(false);
       }
     };

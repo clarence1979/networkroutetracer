@@ -62,16 +62,10 @@ export const useAINetworkTrace = () => {
 
       const openaiService = new OpenAIService(apiKey);
 
-      // Step 1: Get user's location
-      console.log('Getting user location...');
       const userLocation = await openaiService.getUserLocation();
 
-      // Step 2: Resolve target domain location
-      console.log('Resolving target location...');
       const targetLocation = await openaiService.resolveTargetLocation(domain);
 
-      // Step 3: Perform AI-powered traceroute
-      console.log('Performing traceroute...');
       const hops = await openaiService.performTraceroute(userLocation, domain);
 
       // Convert to our NetworkHop format

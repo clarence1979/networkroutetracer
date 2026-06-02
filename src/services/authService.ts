@@ -86,14 +86,8 @@ export class AuthService {
     openaiApiKey?: string;
   }> {
     return new Promise((resolve) => {
-      console.log('[Auth] Attempting auto-login');
-      console.log('[Auth] Running in iframe:', this.isRunningInIframe());
-
       const messageHandler = async (event: MessageEvent) => {
-        console.log('[Auth] Received message:', event.data);
-
         if (event.data.type === 'API_VALUES_RESPONSE') {
-          console.log('[Auth] Got API_VALUES_RESPONSE');
           window.removeEventListener('message', messageHandler);
 
           const { authToken, username, isAdmin, OPENAI_API_KEY, SUPABASE_URL, SUPABASE_ANON_KEY } = event.data.data;
@@ -106,12 +100,10 @@ export class AuthService {
           if (SUPABASE_ANON_KEY) localStorage.setItem('SUPABASE_ANON_KEY', SUPABASE_ANON_KEY);
 
           if (authToken && SUPABASE_URL && SUPABASE_ANON_KEY) {
-            console.log('[Auth] Validating auth token');
             try {
               const validatedUser = await this.validateAuthToken(authToken, SUPABASE_URL, SUPABASE_ANON_KEY);
 
               if (validatedUser) {
-                console.log('[Auth] Token validated successfully:', validatedUser);
                 resolve({
                   authenticated: true,
                   username: validatedUser.username,
@@ -119,15 +111,12 @@ export class AuthService {
                   openaiApiKey: OPENAI_API_KEY,
                 });
                 return;
-              } else {
-                console.log('[Auth] Token validation failed');
               }
             } catch (error) {
               console.error('[Auth] Token validation error:', error);
             }
           }
 
-          console.log('[Auth] Authentication failed');
           resolve({ authenticated: false });
         }
       };
@@ -135,12 +124,10 @@ export class AuthService {
       window.addEventListener('message', messageHandler);
 
       if (this.isRunningInIframe()) {
-        console.log('[Auth] Requesting API values from parent');
         window.parent.postMessage({ type: 'REQUEST_API_VALUES' }, '*');
       }
 
       setTimeout(() => {
-        console.log('[Auth] Timeout reached');
         window.removeEventListener('message', messageHandler);
 
         const storedToken = localStorage.getItem('authToken');
@@ -149,7 +136,6 @@ export class AuthService {
         const storedOpenAI = localStorage.getItem('OPENAI_API_KEY');
 
         if (storedToken && storedUsername) {
-          console.log('[Auth] Using stored credentials:', storedUsername);
           resolve({
             authenticated: true,
             username: storedUsername,
@@ -157,7 +143,6 @@ export class AuthService {
             openaiApiKey: storedOpenAI || undefined,
           });
         } else {
-          console.log('[Auth] No stored credentials');
           resolve({ authenticated: false });
         }
       }, 2000);

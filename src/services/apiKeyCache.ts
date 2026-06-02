@@ -26,7 +26,6 @@ const initializeCache = () => {
         const cachedKey = sessionStorage.getItem('globalApiKey');
         if (cachedKey) {
           globalApiKeyCache.apiKey = cachedKey;
-          console.log('Global API key loaded from session cache');
         }
       } catch (error) {
         console.warn('Failed to load API key from session storage:', error);
@@ -36,7 +35,6 @@ const initializeCache = () => {
       window.addEventListener('beforeunload', () => {
         try {
           sessionStorage.removeItem('globalApiKey');
-          console.log('Global API key cache cleared on page close');
         } catch (error) {
           console.warn('Failed to clear API key cache:', error);
         }
@@ -84,7 +82,6 @@ export const ApiKeyCache = {
         }
       });
       
-      console.log('Global API key updated:', value ? 'API key set' : 'API key cleared');
     }
   },
 
