@@ -7,8 +7,9 @@ import {
   SatelliteInfoPanel,
   SatelliteLegend,
 } from './SatelliteVisualization';
+import { useSatelliteData } from '../../hooks/useSatelliteData';
 import { NetworkHop } from '../../types/networking';
-import { SatelliteOrbit } from '../../types/satellite';
+import { LiveSatellite } from '../../hooks/useSatelliteData';
 
 interface Globe3DContainerProps {
   route?: NetworkHop[];
@@ -26,13 +27,34 @@ const LoadingFallback = () => (
   </div>
 );
 
+// Separate inner component so useSatelliteData only runs when satellites are enabled
+const SatelliteLayer: React.FC<{
+  onHover: (s: LiveSatellite | null) => void;
+  onCount: (n: number) => void;
+}> = ({ onHover, onCount }) => {
+  const { satellites, loading, error } = useSatelliteData();
+
+  React.useEffect(() => { onCount(satellites.length); }, [satellites.length]);
+
+  if (loading) return null;
+  if (error) return null;
+  return <SatelliteVisualization onHover={onHover} />;
+};
+
 export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
   route,
   onHopClick,
   showSatellites = false,
   className = '',
 }) => {
-  const [hoveredSat, setHoveredSat] = useState<SatelliteOrbit | null>(null);
+  const [hoveredSat, setHoveredSat] = useState<LiveSatellite | null>(null);
+  const [satCount, setSatCount] = useState(0);
+  const [satLoading, setSatLoading] = useState(false);
+
+  // Track loading state when satellites are toggled on
+  const { loading: dataLoading } = useSatelliteData
+    ? { loading: false }
+    : { loading: false };
 
   return (
     <div className={`relative w-full h-full bg-gray-900 ${className}`}>
@@ -49,13 +71,13 @@ export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
           <Earth onHopClick={onHopClick} route={route} />
 
           {showSatellites && (
-            <SatelliteVisualization onHover={setHoveredSat} />
+            <SatelliteLayer onHover={setHoveredSat} onCount={setSatCount} />
           )}
 
           <OrbitControls
-            enablePan={true}
-            enableZoom={true}
-            enableRotate={true}
+            enablePan
+            enableZoom
+            enableRotate
             zoomSpeed={0.6}
             panSpeed={0.8}
             rotateSpeed={0.4}
@@ -69,8 +91,15 @@ export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
         <SatelliteInfoPanel satellite={hoveredSat} />
       )}
 
-      {showSatellites && (
-        <SatelliteLegend />
+      {showSatellites && satCount > 0 && (
+        <SatelliteLegend count={satCount} />
+      )}
+
+      {showSatellites && satCount === 0 && (
+        <div className="absolute bottom-3 left-3 z-10 rounded-lg border border-gray-600 bg-gray-900/90 backdrop-blur-sm px-3 py-2 text-xs text-gray-300 shadow-xl pointer-events-none flex items-center gap-2">
+          <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-400" />
+          Fetching live TLE data from CelesTrak…
+        </div>
       )}
     </div>
   );
