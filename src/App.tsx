@@ -22,6 +22,7 @@ type Tab = 'basics' | 'ip-theory' | 'home' | 'trace' | 'quiz' | 'stats' | 'priva
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('basics');
   const [selectedHop, setSelectedHop] = useState<NetworkHop | undefined>();
+  const [showSatellites, setShowSatellites] = useState(false);
   const { user, isAuthenticated, isLoading, login, logout, openaiApiKey, setLoading } = useAuth();
   const { loading, error, routeData, traceRoute, hasAPIKey, isInitialized } = useAINetworkTrace();
 
@@ -228,13 +229,31 @@ function App() {
 
             <div className="lg:col-span-2">
               <div className="bg-white rounded-lg shadow-lg overflow-hidden" style={{ height: '400px', minHeight: '300px' }}>
-                <Globe3DContainer
-                  route={routeData?.hops}
-                  onHopClick={(hop) => {
-                    setSelectedHop(hop);
-                  }}
-                  className="w-full h-full"
-                />
+                <div className="relative w-full h-full">
+                  {/* Satellite toggle — overlay on top-left of globe */}
+                  <label className="absolute top-3 left-3 z-10 flex items-center gap-2 cursor-pointer select-none bg-gray-900/85 backdrop-blur-sm border border-gray-600 rounded-lg px-3 py-1.5 text-xs text-white shadow-lg hover:bg-gray-800/90 transition-colors">
+                    <div className="relative flex-shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={showSatellites}
+                        onChange={e => setShowSatellites(e.target.checked)}
+                        className="sr-only"
+                      />
+                      <div className={`w-8 h-4 rounded-full transition-colors ${showSatellites ? 'bg-blue-500' : 'bg-gray-600'}`} />
+                      <div className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${showSatellites ? 'translate-x-4' : 'translate-x-0'}`} />
+                    </div>
+                    <span className="font-medium">Satellites &amp; Debris</span>
+                  </label>
+
+                  <Globe3DContainer
+                    route={routeData?.hops}
+                    showSatellites={showSatellites}
+                    onHopClick={(hop) => {
+                      setSelectedHop(hop);
+                    }}
+                    className="w-full h-full"
+                  />
+                </div>
               </div>
             </div>
           </div>

@@ -1,14 +1,19 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment } from '@react-three/drei';
 import { Earth } from './Earth';
-import { RouteVisualization } from './RouteVisualization';
-import { SpaceObjects } from './SpaceObjects';
+import {
+  SatelliteVisualization,
+  SatelliteInfoPanel,
+  SatelliteLegend,
+} from './SatelliteVisualization';
 import { NetworkHop } from '../../types/networking';
+import { SatelliteOrbit } from '../../types/satellite';
 
 interface Globe3DContainerProps {
   route?: NetworkHop[];
   onHopClick?: (hop: NetworkHop) => void;
+  showSatellites?: boolean;
   className?: string;
 }
 
@@ -24,28 +29,29 @@ const LoadingFallback = () => (
 export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
   route,
   onHopClick,
-  className = ""
+  showSatellites = false,
+  className = '',
 }) => {
+  const [hoveredSat, setHoveredSat] = useState<SatelliteOrbit | null>(null);
+
   return (
-    <div className={`w-full h-full bg-gray-900 ${className}`}>
+    <div className={`relative w-full h-full bg-gray-900 ${className}`}>
       <Suspense fallback={<LoadingFallback />}>
         <Canvas
           camera={{ position: [0, 0, 5], fov: 45 }}
           gl={{ antialias: true, alpha: true }}
         >
-          {/* Lighting */}
           <ambientLight intensity={0.3} />
           <directionalLight position={[5, 5, 5]} intensity={1} />
           <pointLight position={[-5, -5, -5]} intensity={0.5} />
-
-          {/* Environment for reflections */}
           <Environment preset="night" />
 
-          {/* Earth */}
           <Earth onHopClick={onHopClick} route={route} />
 
+          {showSatellites && (
+            <SatelliteVisualization onHover={setHoveredSat} />
+          )}
 
-          {/* Camera controls */}
           <OrbitControls
             enablePan={true}
             enableZoom={true}
@@ -58,6 +64,14 @@ export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
           />
         </Canvas>
       </Suspense>
+
+      {showSatellites && hoveredSat && (
+        <SatelliteInfoPanel satellite={hoveredSat} />
+      )}
+
+      {showSatellites && (
+        <SatelliteLegend />
+      )}
     </div>
   );
 };
