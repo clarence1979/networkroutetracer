@@ -7,7 +7,6 @@ import {
   SatelliteInfoPanel,
   SatelliteLegend,
 } from './SatelliteVisualization';
-import { useSatelliteData } from '../../hooks/useSatelliteData';
 import { NetworkHop } from '../../types/networking';
 import { LiveSatellite } from '../../hooks/useSatelliteData';
 
@@ -21,25 +20,11 @@ interface Globe3DContainerProps {
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full bg-gray-900 text-white">
     <div className="text-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4" />
       <p>Loading Earth...</p>
     </div>
   </div>
 );
-
-// Separate inner component so useSatelliteData only runs when satellites are enabled
-const SatelliteLayer: React.FC<{
-  onHover: (s: LiveSatellite | null) => void;
-  onCount: (n: number) => void;
-}> = ({ onHover, onCount }) => {
-  const { satellites, loading, error } = useSatelliteData();
-
-  React.useEffect(() => { onCount(satellites.length); }, [satellites.length]);
-
-  if (loading) return null;
-  if (error) return null;
-  return <SatelliteVisualization onHover={onHover} />;
-};
 
 export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
   route,
@@ -49,12 +34,6 @@ export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
 }) => {
   const [hoveredSat, setHoveredSat] = useState<LiveSatellite | null>(null);
   const [satCount, setSatCount] = useState(0);
-  const [satLoading, setSatLoading] = useState(false);
-
-  // Track loading state when satellites are toggled on
-  const { loading: dataLoading } = useSatelliteData
-    ? { loading: false }
-    : { loading: false };
 
   return (
     <div className={`relative w-full h-full bg-gray-900 ${className}`}>
@@ -71,7 +50,10 @@ export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
           <Earth onHopClick={onHopClick} route={route} />
 
           {showSatellites && (
-            <SatelliteLayer onHover={setHoveredSat} onCount={setSatCount} />
+            <SatelliteVisualization
+              onHover={setHoveredSat}
+              onCount={setSatCount}
+            />
           )}
 
           <OrbitControls

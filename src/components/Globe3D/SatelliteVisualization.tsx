@@ -1,16 +1,14 @@
-import React, { useRef, useMemo, useEffect, useState } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import * as satellite from 'satellite.js';
 import { SatelliteType } from '../../types/satellite';
 import { LiveSatellite, useSatelliteData } from '../../hooks/useSatelliteData';
 
-// ── ECI → Three.js coordinate conversion ─────────────────────────
-// ECI uses Z=north, X=vernal equinox, Y completes right-hand system.
-// Three.js uses Y=up. Mapping: x_3js = x_eci, y_3js = z_eci, z_3js = -y_eci
-//
-// Visual log-scale: brings GEO (~35 786 km) into view while preserving
-// relative altitude ordering. Earth globe radius = 2 Three.js units.
+// ── ECI → Three.js ───────────────────────────────────────────────
+// ECI: X=vernal equinox, Y completes right-hand, Z=north pole
+// Three.js (Y-up): x_3js=x_eci, y_3js=z_eci, z_3js=-y_eci
+// Visual log-scale so GEO (~35 786 km) stays in view; Earth radius = 2 units.
 
 function eciToVec3(pos: satellite.EciVec3<number>, altKm: number): THREE.Vector3 {
   const r = Math.sqrt(pos.x * pos.x + pos.y * pos.y + pos.z * pos.z);
@@ -20,7 +18,7 @@ function eciToVec3(pos: satellite.EciVec3<number>, altKm: number): THREE.Vector3
   return new THREE.Vector3(pos.x * s, pos.z * s, -pos.y * s);
 }
 
-// ── Colour / size by category ────────────────────────────────────
+// ── Colour / size lookup ─────────────────────────────────────────
 
 const TYPE_COLOR: Record<SatelliteType, string> = {
   station:       '#00E5FF',
@@ -42,7 +40,7 @@ const TYPE_SIZE: Record<SatelliteType, number> = {
   debris:        0.009,
 };
 
-// ── Orbital ring (precomputed from TLE propagation) ───────────────
+// ── Orbital ring (one per non-debris satellite) ──────────────────
 
 const RING_CATEGORIES = new Set<SatelliteType>(['station', 'scientific', 'weather']);
 
@@ -51,21 +49,16 @@ function buildRingGeometry(sat: LiveSatellite): THREE.BufferGeometry | null {
   const periodMs = sat.period * 60 * 1000;
   const now = Date.now();
   const pts: THREE.Vector3[] = [];
-
   for (let i = 0; i <= steps; i++) {
-    const t = new Date(now + (i / steps) * periodMs);
     try {
-      const pv = satellite.propagate(sat.satrec, t);
+      const pv = satellite.propagate(sat.satrec, new Date(now + (i / steps) * periodMs));
       if (!pv.position || typeof pv.position === 'boolean') continue;
       pts.push(eciToVec3(pv.position, sat.altitude));
     } catch (_) {/* skip */}
   }
-
   if (pts.length < 10) return null;
   return new THREE.BufferGeometry().setFromPoints(pts);
 }
-
-// ── Orbital ring component ────────────────────────────────────────
 
 const OrbitalRing: React.FC<{ sat: LiveSatellite }> = ({ sat }) => {
   const geometry = useMemo(() => buildRingGeometry(sat), [sat.noradId]);
@@ -81,19 +74,22 @@ const OrbitalRing: React.FC<{ sat: LiveSatellite }> = ({ sat }) => {
 
 interface Props {
   onHover: (sat: LiveSatellite | null) => void;
+  onCount: (n: number) => void;
 }
 
-export const SatelliteVisualization: React.FC<Props> = ({ onHover }) => {
-  const { satellites, loading, error } = useSatelliteData();
+export const SatelliteVisualization: React.FC<Props> = ({ onHover, onCount }) => {
+  const { satellites } = useSatelliteData();
 
-  const named = useMemo(() => satellites.filter(s => s.category !== 'debris'), [satellites]);
-  const debris = useMemo(() => satellites.filter(s => s.category === 'debris'), [satellites]);
+  // Notify parent once when count changes
+  useEffect(() => { onCount(satellites.length); }, [satellites.length]);
+
+  const named  = useMemo(() => satellites.filter(s => s.category !== 'debris'), [satellites]);
+  const debris = useMemo(() => satellites.filter(s => s.category === 'debris'),  [satellites]);
 
   const satRefs  = useRef<(THREE.Mesh | null)[]>([]);
   const debrisIM = useRef<THREE.InstancedMesh | null>(null);
   const dummy    = useMemo(() => new THREE.Object3D(), []);
 
-  // Resize ref arrays when data changes
   useEffect(() => {
     satRefs.current = satRefs.current.slice(0, named.length);
   }, [named.length]);
@@ -102,7 +98,6 @@ export const SatelliteVisualization: React.FC<Props> = ({ onHover }) => {
     if (!satellites.length) return;
     const now = new Date();
 
-    // Named satellites – individual meshes
     named.forEach((sat, i) => {
       const mesh = satRefs.current[i];
       if (!mesh) return;
@@ -110,10 +105,9 @@ export const SatelliteVisualization: React.FC<Props> = ({ onHover }) => {
         const pv = satellite.propagate(sat.satrec, now);
         if (!pv.position || typeof pv.position === 'boolean') return;
         mesh.position.copy(eciToVec3(pv.position, sat.altitude));
-      } catch (_) {/* invalid TLE epoch */}
+      } catch (_) {/* expired epoch */}
     });
 
-    // Debris – instanced mesh
     const im = debrisIM.current;
     if (im && debris.length) {
       debris.forEach((sat, i) => {
@@ -129,16 +123,16 @@ export const SatelliteVisualization: React.FC<Props> = ({ onHover }) => {
     }
   });
 
-  if (loading || error || !satellites.length) return null;
+  if (!satellites.length) return null;
 
   return (
     <group>
-      {/* Orbital rings for stations, scientific, weather */}
+      {/* Orbital rings — only stations / scientific / weather */}
       {named
         .filter(s => RING_CATEGORIES.has(s.category))
         .map(s => <OrbitalRing key={s.noradId} sat={s} />)}
 
-      {/* Named satellite markers */}
+      {/* Named satellite dots */}
       {named.map((sat, i) => (
         <mesh
           key={sat.noradId}
@@ -151,7 +145,7 @@ export const SatelliteVisualization: React.FC<Props> = ({ onHover }) => {
         </mesh>
       ))}
 
-      {/* Space debris – instanced for performance */}
+      {/* Debris — instanced mesh */}
       {debris.length > 0 && (
         <instancedMesh
           ref={debrisIM}
@@ -171,7 +165,7 @@ export const SatelliteVisualization: React.FC<Props> = ({ onHover }) => {
   );
 };
 
-// ── HTML overlays (rendered outside Canvas) ───────────────────────
+// ── Info panel ────────────────────────────────────────────────────
 
 const TYPE_LABEL: Record<SatelliteType, string> = {
   station:       'Space Station',
@@ -189,10 +183,7 @@ export const SatelliteInfoPanel: React.FC<{ satellite: LiveSatellite }> = ({ sat
     style={{ minWidth: 190 }}
   >
     <div className="flex items-center gap-2 mb-2">
-      <span
-        className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
-        style={{ backgroundColor: TYPE_COLOR[sat.category] }}
-      />
+      <span className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: TYPE_COLOR[sat.category] }} />
       <span className="font-semibold text-sm leading-tight truncate">{sat.name}</span>
     </div>
     <div className="text-gray-400 mb-2 text-[11px]">{TYPE_LABEL[sat.category]}</div>
@@ -204,7 +195,7 @@ export const SatelliteInfoPanel: React.FC<{ satellite: LiveSatellite }> = ({ sat
       <Row label="Period"      value={formatPeriod(sat.period)} />
     </div>
     <div className="mt-2 pt-2 border-t border-gray-700 text-gray-500 text-[10px]">
-      Live SGP4 position
+      Live SGP4 position · TLE via CelesTrak
     </div>
   </div>
 );
@@ -224,25 +215,22 @@ function formatPeriod(minutes: number): string {
 
 // ── Legend ────────────────────────────────────────────────────────
 
-const LEGEND_ENTRIES: { type: SatelliteType; label: string }[] = [
-  { type: 'station',       label: 'Space Station' },
-  { type: 'navigation',    label: 'Navigation (GPS/GLONASS/Galileo/BeiDou)' },
-  { type: 'communication', label: 'Communication (Starlink)' },
-  { type: 'scientific',    label: 'Scientific' },
-  { type: 'weather',       label: 'Weather' },
-  { type: 'debris',        label: 'Space Debris' },
-];
-
 export const SatelliteLegend: React.FC<{ count: number }> = ({ count }) => (
   <div className="absolute bottom-3 left-3 z-10 rounded-lg border border-gray-600 bg-gray-900/90 backdrop-blur-sm px-3 py-2 text-[11px] text-white shadow-xl pointer-events-none">
     <div className="font-semibold text-xs mb-1.5 text-gray-300">Live Satellite Data</div>
     <div className="space-y-1">
-      {LEGEND_ENTRIES.map(({ type, label }) => (
-        <div key={type} className="flex items-center gap-2">
-          <span
-            className="inline-block w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: TYPE_COLOR[type] }}
-          />
+      {(
+        [
+          ['station',       '#00E5FF', 'Space Station'],
+          ['navigation',    '#FFD700', 'Navigation (GPS / GLONASS / Galileo / BeiDou)'],
+          ['communication', '#4ADE80', 'Communication (Starlink)'],
+          ['scientific',    '#F472B6', 'Scientific'],
+          ['weather',       '#60A5FA', 'Weather'],
+          ['debris',        '#EF4444', 'Space Debris'],
+        ] as [string, string, string][]
+      ).map(([, color, label]) => (
+        <div key={label} className="flex items-center gap-2">
+          <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
           <span className="text-gray-300">{label}</span>
         </div>
       ))}
@@ -252,6 +240,3 @@ export const SatelliteLegend: React.FC<{ count: number }> = ({ count }) => (
     </div>
   </div>
 );
-
-// Satisfy existing import in Globe3DContainer
-export const SpaceObjects = SatelliteVisualization;
