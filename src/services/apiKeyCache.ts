@@ -1,136 +1,62 @@
-// Global API Key Cache Service
-interface ApiKeyCache {
+// In-memory singleton — no window global, no cross-tab leakage.
+// The OpenAI API key is user-supplied at runtime and lives only in
+// sessionStorage (cleared when the tab closes) plus this module variable.
+
+interface CacheStore {
   apiKey: string;
   listeners: Set<(apiKey: string) => void>;
 }
 
-// Create global cache object
-const createGlobalCache = (): ApiKeyCache => ({
-  apiKey: '',
-  listeners: new Set()
-});
+const store: CacheStore = { apiKey: '', listeners: new Set() };
 
-// Initialize global cache
-let globalApiKeyCache: ApiKeyCache;
+// Restore from sessionStorage on first load (clears automatically on tab close)
+try {
+  const saved = sessionStorage.getItem('globalApiKey');
+  if (saved) store.apiKey = saved;
+} catch (_) { /* storage unavailable */ }
 
-// Initialize cache and attach to window
-const initializeCache = () => {
-  if (typeof window !== 'undefined') {
-    // Create cache if it doesn't exist
-    if (!window.apiKeyCache) {
-      globalApiKeyCache = createGlobalCache();
-      window.apiKeyCache = globalApiKeyCache;
-      
-      // Try to load from sessionStorage (clears on tab close)
-      try {
-        const cachedKey = sessionStorage.getItem('globalApiKey');
-        if (cachedKey) {
-          globalApiKeyCache.apiKey = cachedKey;
-        }
-      } catch (error) {
-        console.warn('Failed to load API key from session storage:', error);
-      }
-      
-      // Clear cache when page/tab closes
-      window.addEventListener('beforeunload', () => {
-        try {
-          sessionStorage.removeItem('globalApiKey');
-        } catch (error) {
-          console.warn('Failed to clear API key cache:', error);
-        }
-      });
-    } else {
-      globalApiKeyCache = window.apiKeyCache;
-    }
-  } else {
-    // Fallback for non-browser environments
-    globalApiKeyCache = createGlobalCache();
-  }
-};
-
-// Initialize on module load
-initializeCache();
+// Wipe from sessionStorage on tab/window close
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    try { sessionStorage.removeItem('globalApiKey'); } catch (_) { /* ignore */ }
+  });
+}
 
 export const ApiKeyCache = {
-  // Get current API key
   get apiKey(): string {
-    return globalApiKeyCache?.apiKey || '';
+    return store.apiKey;
   },
 
-  // Set API key and notify all listeners
   set apiKey(value: string) {
-    if (globalApiKeyCache) {
-      globalApiKeyCache.apiKey = value;
-      
-      // Save to sessionStorage (auto-clears on tab close)
-      try {
-        if (value) {
-          sessionStorage.setItem('globalApiKey', value);
-        } else {
-          sessionStorage.removeItem('globalApiKey');
-        }
-      } catch (error) {
-        console.warn('Failed to save API key to session storage:', error);
+    store.apiKey = value;
+    try {
+      if (value) {
+        sessionStorage.setItem('globalApiKey', value);
+      } else {
+        sessionStorage.removeItem('globalApiKey');
       }
-      
-      // Notify all listeners
-      globalApiKeyCache.listeners.forEach(listener => {
-        try {
-          listener(value);
-        } catch (error) {
-          console.warn('Error notifying API key listener:', error);
-        }
-      });
-      
-    }
+    } catch (_) { /* storage unavailable */ }
+    store.listeners.forEach(fn => {
+      try { fn(value); } catch (_) { /* never let a listener crash the setter */ }
+    });
   },
 
-  // Subscribe to API key changes
   subscribe(listener: (apiKey: string) => void): () => void {
-    if (globalApiKeyCache) {
-      globalApiKeyCache.listeners.add(listener);
-      
-      // Immediately call with current value
-      listener(globalApiKeyCache.apiKey);
-      
-      // Return unsubscribe function
-      return () => {
-        globalApiKeyCache.listeners.delete(listener);
-      };
-    }
-    
-    return () => {}; // No-op unsubscribe for fallback
+    store.listeners.add(listener);
+    listener(store.apiKey); // emit current value immediately
+    return () => { store.listeners.delete(listener); };
   },
 
-  // Clear the cache
-  clear(): void {
+  clear() {
     this.apiKey = '';
   },
 
-  // Check if API key exists
   hasApiKey(): boolean {
-    return !!this.apiKey;
-  }
-};
-
-// Extend Window interface for TypeScript
-declare global {
-  interface Window {
-    apiKeyCache: ApiKeyCache;
-  }
-}
-
-// Export for direct access (cache.apiKey)
-export const cache = {
-  get apiKey(): string {
-    return ApiKeyCache.apiKey;
+    return !!store.apiKey;
   },
-  
-  set apiKey(value: string) {
-    ApiKeyCache.apiKey = value;
-  }
 };
 
-// Also export as globalApiKey and sharedApiKey for convenience
+// Convenience aliases used elsewhere in the codebase
+export const cache       = ApiKeyCache;
 export const globalApiKey = ApiKeyCache;
 export const sharedApiKey = ApiKeyCache;
