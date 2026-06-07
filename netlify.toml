@@ -1,29 +1,25 @@
 [build]
-  publish = "dist"
+publish = "dist"
+command = "npx vite build"
 
-# ── Security headers on every route ──────────────────────────────────────────
 [[headers]]
-  for = "/*"
-  [headers.values]
-    Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
-    X-Content-Type-Options    = "nosniff"
-    # SAMEORIGIN (not DENY) — the app runs embedded in an iframe on teachingtools.dev.
-    # DENY would break the iframe authentication flow.
-    # CSP frame-ancestors below provides granular origin control for modern browsers.
-    X-Frame-Options           = "SAMEORIGIN"
-    Referrer-Policy           = "strict-origin-when-cross-origin"
-    Permissions-Policy        = "camera=(), microphone=(), geolocation=()"
-    Content-Security-Policy   = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://raw.githubusercontent.com https://www.paypalobjects.com https://www.paypal.com https://streetviewpixels-pa.googleapis.com; connect-src 'self' https://kwpugqydnzrftzlogobh.supabase.co wss://kwpugqydnzrftzlogobh.supabase.co https://qfitpwdrswvnbmzvkoyd.supabase.co wss://qfitpwdrswvnbmzvkoyd.supabase.co https://api.openai.com; font-src 'self'; form-action 'self' https://www.paypal.com; frame-ancestors https://teachingtools.dev; object-src 'none'; base-uri 'self'; worker-src 'none'; manifest-src 'self'"
+for = "/*"
 
-# ── Hostname redirect: network.teachingtools.dev → teachingtools.dev ──────────
-[[redirects]]
-  from   = "https://network.teachingtools.dev/*"
-  to     = "https://teachingtools.dev/:splat"
-  status = 301
-  force  = true
+[headers.values]
+Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
+X-Content-Type-Options = "nosniff"
+X-Frame-Options = "SAMEORIGIN"
+Referrer-Policy = "strict-origin-when-cross-origin"
+Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://raw.githubusercontent.com https://www.paypalobjects.com https://www.paypal.com https://streetviewpixels-pa.googleapis.com; connect-src 'self' https://kwpugqydnzrftzlogobh.supabase.co wss://kwpugqydnzrftzlogobh.supabase.co https://qfitpwdrswvnbmzvkoyd.supabase.co wss://qfitpwdrswvnbmzvkoyd.supabase.co https://api.openai.com; font-src 'self'; form-action 'self' https://www.paypal.com; frame-ancestors https://teachingtools.dev; object-src 'none'; base-uri 'self'; worker-src 'none'; manifest-src 'self'"
 
-# ── SPA fallback ──────────────────────────────────────────────────────────────
 [[redirects]]
-  from   = "/*"
-  to     = "/index.html"
-  status = 200
+from = "https://network.teachingtools.dev/*"
+to = "https://teachingtools.dev/:splat"
+status = 301
+force = true
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200
