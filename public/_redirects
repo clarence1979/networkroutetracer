@@ -1,2 +1,1 @@
-# Redirect the network subdomain to the main site
-https://network.teachingtools.dev/* https://teachingtools.dev/:splat 301!
+/* /index.html 200
