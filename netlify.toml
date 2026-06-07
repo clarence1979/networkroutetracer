@@ -8,7 +8,6 @@ for = "/*"
 [headers.values]
 Strict-Transport-Security = "max-age=63072000; includeSubDomains; preload"
 X-Content-Type-Options = "nosniff"
-X-Frame-Options = "SAMEORIGIN"
 Referrer-Policy = "strict-origin-when-cross-origin"
 Permissions-Policy = "camera=(), microphone=(), geolocation=()"
 Content-Security-Policy = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://raw.githubusercontent.com https://www.paypalobjects.com https://www.paypal.com https://streetviewpixels-pa.googleapis.com; connect-src 'self' https://kwpugqydnzrftzlogobh.supabase.co wss://kwpugqydnzrftzlogobh.supabase.co https://qfitpwdrswvnbmzvkoyd.supabase.co wss://qfitpwdrswvnbmzvkoyd.supabase.co https://api.openai.com; font-src 'self'; form-action 'self' https://www.paypal.com; frame-ancestors https://teachingtools.dev; object-src 'none'; base-uri 'self'; worker-src 'none'; manifest-src 'self'"
