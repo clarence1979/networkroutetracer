@@ -13,7 +13,7 @@ export interface AuthState {
 export interface IframeAuthData {
   username: string;
   isAdmin: boolean;
-  authToken: string;
+  authToken?: string;
   OPENAI_API_KEY?: string;
   CLAUDE_API_KEY?: string;
   GEMINI_API_KEY?: string;

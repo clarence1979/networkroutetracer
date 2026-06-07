@@ -13,6 +13,7 @@ import { useAINetworkTrace } from './hooks/useAINetworkTrace';
 import { ApiKeyCache } from './services/apiKeyCache';
 import { authService } from './services/authService';
 import { useAuth } from './contexts/AuthContext';
+import { attemptAutoLogin, isInIframe } from './utils/auto-login';
 import { NetworkHop } from './types/networking';
 import { Network, BookOpen, Brain, BarChart3, Wifi, Settings, LogOut, Loader2 } from 'lucide-react';
 import { Server } from 'lucide-react';
@@ -28,16 +29,18 @@ function App() {
 
   useEffect(() => {
     const initAuth = async () => {
-      const authResult = await authService.attemptAutoLogin();
+      if (isInIframe()) {
+        const result = await attemptAutoLogin();
 
-      if (authResult.authenticated && authResult.username) {
-        login(authResult.username, authResult.isAdmin || false, authResult.openaiApiKey);
-        if (authResult.openaiApiKey) {
-          ApiKeyCache.apiKey = authResult.openaiApiKey;
+        if (result.authenticated && result.username) {
+          login(result.username, result.isAdmin ?? false, result.apiKey || undefined);
+          if (result.apiKey) {
+            ApiKeyCache.apiKey = result.apiKey;
+          }
+          return;
         }
-      } else {
-        setLoading(false);
       }
+      setLoading(false);
     };
 
     initAuth();
@@ -57,12 +60,20 @@ function App() {
   };
 
   const handleLogout = () => {
+    // Legacy keys
     localStorage.removeItem('authToken');
     localStorage.removeItem('username');
     localStorage.removeItem('isAdmin');
     localStorage.removeItem('OPENAI_API_KEY');
     localStorage.removeItem('SUPABASE_URL');
     localStorage.removeItem('SUPABASE_ANON_KEY');
+    // VITE_-prefixed keys from auto-login
+    localStorage.removeItem('VITE_SUPABASE_URL');
+    localStorage.removeItem('VITE_SUPABASE_ANON_KEY');
+    localStorage.removeItem('VITE_OPENAI_API_KEY');
+    localStorage.removeItem('VITE_CLAUDE_API_KEY');
+    localStorage.removeItem('VITE_GEMINI_API_KEY');
+    localStorage.removeItem('VITE_REPLICATE_API_KEY');
     ApiKeyCache.clear();
     logout();
   };

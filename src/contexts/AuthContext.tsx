@@ -34,6 +34,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const logout = () => {
+    // Legacy keys
     localStorage.removeItem('auth_user');
     localStorage.removeItem('openai_api_key');
     localStorage.removeItem('authToken');
@@ -42,6 +43,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     localStorage.removeItem('OPENAI_API_KEY');
     localStorage.removeItem('SUPABASE_URL');
     localStorage.removeItem('SUPABASE_ANON_KEY');
+    // VITE_-prefixed keys from auto-login utility
+    localStorage.removeItem('VITE_SUPABASE_URL');
+    localStorage.removeItem('VITE_SUPABASE_ANON_KEY');
+    localStorage.removeItem('VITE_OPENAI_API_KEY');
+    localStorage.removeItem('VITE_CLAUDE_API_KEY');
+    localStorage.removeItem('VITE_GEMINI_API_KEY');
+    localStorage.removeItem('VITE_REPLICATE_API_KEY');
     setAuthState({
       user: null,
       isAuthenticated: false,
