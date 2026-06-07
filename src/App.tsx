@@ -24,7 +24,7 @@ function App() {
   const [selectedHop, setSelectedHop] = useState<NetworkHop | undefined>();
   const [showSatellites, setShowSatellites] = useState(false);
   const { user, isAuthenticated, isLoading, login, logout, openaiApiKey, setLoading } = useAuth();
-  const { loading, error, routeData, traceRoute, hasAPIKey, isInitialized } = useAINetworkTrace();
+  const { loading, error, routeData, currentModel, traceRoute, hasAPIKey, isInitialized } = useAINetworkTrace();
 
   useEffect(() => {
     const initAuth = async () => {
@@ -213,6 +213,7 @@ function App() {
                 error={error}
                 disabled={!hasAPIKey}
                 isInitializing={!isInitialized}
+                currentModel={currentModel}
               />
 
               <RouteInfoPanel

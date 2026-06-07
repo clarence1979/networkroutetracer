@@ -1,47 +1,41 @@
-import React from 'react';
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { RouteData, NetworkHop } from '../types/networking';
-import { OpenAIService } from '../services/openaiService';
+import { OpenAIService, fetchLatestModel } from '../services/openaiService';
 import { ApiKeyCache } from '../services/apiKeyCache';
 
 export const useAINetworkTrace = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [routeData, setRouteData] = useState<RouteData | null>(null);
-  const [apiKey, setApiKey] = useState<string>(ApiKeyCache.apiKey);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [routeData,    setRouteData]    = useState<RouteData | null>(null);
+  const [apiKey,       setApiKey]       = useState<string>(ApiKeyCache.apiKey);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [currentModel, setCurrentModel] = useState<string | null>(null);
 
-  // Subscribe to global API key changes
+  // Subscribe to global API key changes and pre-fetch the latest model
   React.useEffect(() => {
     const unsubscribe = ApiKeyCache.subscribe((newApiKey) => {
       setApiKey(newApiKey);
       setIsInitialized(true);
+      if (newApiKey) {
+        fetchLatestModel(newApiKey).then(setCurrentModel).catch(() => {/* ignore */});
+      }
     });
-
     return unsubscribe;
   }, []);
 
   const calculateDistance = (hops: NetworkHop[]): number => {
-    let totalDistance = 0;
+    let total = 0;
     for (let i = 0; i < hops.length - 1; i++) {
-      const hop1 = hops[i];
-      const hop2 = hops[i + 1];
-      
-      // Haversine formula for distance calculation
-      const lat1 = hop1.location.lat * Math.PI / 180;
-      const lat2 = hop2.location.lat * Math.PI / 180;
-      const deltaLat = (hop2.location.lat - hop1.location.lat) * Math.PI / 180;
-      const deltaLng = (hop2.location.lng - hop1.location.lng) * Math.PI / 180;
-
-      const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-                Math.cos(lat1) * Math.cos(lat2) *
-                Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const distance = 6371 * c; // Earth's radius in kilometers
-
-      totalDistance += distance;
+      const { lat: lat1, lng: lng1 } = hops[i].location;
+      const { lat: lat2, lng: lng2 } = hops[i + 1].location;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLng = (lng2 - lng1) * Math.PI / 180;
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      total += 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     }
-    return Math.round(totalDistance);
+    return Math.round(total);
   };
 
   const traceRoute = async (domain: string): Promise<void> => {
@@ -54,58 +48,50 @@ export const useAINetworkTrace = () => {
     setError(null);
 
     try {
-      // Validate domain
       const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.([a-zA-Z]{2,}|[a-zA-Z]{2,}\.[a-zA-Z]{2,})$/;
       if (!domainRegex.test(domain)) {
         throw new Error('Please enter a valid domain name (e.g., google.com, bbc.co.uk)');
       }
 
-      const openaiService = new OpenAIService(apiKey);
+      const service = new OpenAIService(apiKey);
 
-      const userLocation = await openaiService.getUserLocation();
+      const [userLocation, targetLocation] = await Promise.all([
+        service.getUserLocation(),
+        service.resolveTargetLocation(domain),
+      ]);
 
-      const targetLocation = await openaiService.resolveTargetLocation(domain);
+      // Update displayed model after first request resolves it
+      service.getModel().then(setCurrentModel);
 
-      const hops = await openaiService.performTraceroute(userLocation, domain);
+      const hops = await service.performTraceroute(userLocation, domain);
 
-      // Convert to our NetworkHop format
-      const networkHops: NetworkHop[] = hops.map(hop => ({
-        id: hop.hop,
-        ip: hop.ip,
-        hostname: hop.hostname,
-        location: hop.location,
-        latency: hop.latency,
-        organization: hop.organization,
-        type: hop.type
+      const networkHops: NetworkHop[] = hops.map(h => ({
+        id:           h.hop,
+        ip:           h.ip,
+        hostname:     h.hostname,
+        location:     h.location,
+        latency:      h.latency,
+        organization: h.organization,
+        type:         h.type,
       }));
 
-      const totalDistance = calculateDistance(networkHops);
-      const averageLatency = networkHops.reduce((sum, hop) => sum + hop.latency, 0) / networkHops.length;
-
-      const route: RouteData = {
+      setRouteData({
         domain,
-        totalDistance,
-        totalHops: networkHops.length,
-        averageLatency,
-        hops: networkHops,
-        timestamp: new Date()
-      };
-
-      setRouteData(route);
-
+        totalDistance:  calculateDistance(networkHops),
+        totalHops:      networkHops.length,
+        averageLatency: networkHops.reduce((s, h) => s + h.latency, 0) / networkHops.length,
+        hops:           networkHops,
+        timestamp:      new Date(),
+      });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to trace route';
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Failed to trace route');
       setRouteData(null);
     } finally {
       setLoading(false);
     }
   };
 
-  const clearRoute = () => {
-    setRouteData(null);
-    setError(null);
-  };
+  const clearRoute = () => { setRouteData(null); setError(null); };
 
   const updateAPIKey = (newApiKey: string) => {
     ApiKeyCache.apiKey = newApiKey;
@@ -116,10 +102,11 @@ export const useAINetworkTrace = () => {
     loading,
     error,
     routeData,
+    currentModel,
     traceRoute,
     clearRoute,
     updateAPIKey,
-    hasAPIKey: ApiKeyCache.hasApiKey(),
-    isInitialized
+    hasAPIKey:      ApiKeyCache.hasApiKey(),
+    isInitialized,
   };
 };
