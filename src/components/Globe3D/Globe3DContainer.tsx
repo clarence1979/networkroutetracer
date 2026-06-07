@@ -17,11 +17,19 @@ interface Globe3DContainerProps {
   className?: string;
 }
 
+const SPEED_OPTIONS: { label: string; value: number }[] = [
+  { label: '1×',    value: 1     },
+  { label: '30×',   value: 30    },
+  { label: '60×',   value: 60    },
+  { label: '300×',  value: 300   },
+  { label: '1000×', value: 1000  },
+];
+
 const LoadingFallback = () => (
   <div className="flex items-center justify-center h-full bg-gray-900 text-white">
     <div className="text-center">
       <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4" />
-      <p>Loading Earth...</p>
+      <p>Loading Earth…</p>
     </div>
   </div>
 );
@@ -32,8 +40,9 @@ export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
   showSatellites = false,
   className = '',
 }) => {
-  const [hoveredSat, setHoveredSat] = useState<LiveSatellite | null>(null);
-  const [satCount, setSatCount] = useState(0);
+  const [hoveredSat, setHoveredSat]   = useState<LiveSatellite | null>(null);
+  const [satCount,   setSatCount]     = useState(0);
+  const [simSpeed,   setSimSpeed]     = useState(60); // default 60× so motion is visible
 
   return (
     <div className={`relative w-full h-full bg-gray-900 ${className}`}>
@@ -53,6 +62,7 @@ export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
             <SatelliteVisualization
               onHover={setHoveredSat}
               onCount={setSatCount}
+              simSpeed={simSpeed}
             />
           )}
 
@@ -69,18 +79,33 @@ export const Globe3DContainer: React.FC<Globe3DContainerProps> = ({
         </Canvas>
       </Suspense>
 
+      {/* Satellite hover info */}
       {showSatellites && hoveredSat && (
         <SatelliteInfoPanel satellite={hoveredSat} />
       )}
 
+      {/* Satellite legend */}
       {showSatellites && satCount > 0 && (
         <SatelliteLegend count={satCount} />
       )}
 
-      {showSatellites && satCount === 0 && (
-        <div className="absolute bottom-3 left-3 z-10 rounded-lg border border-gray-600 bg-gray-900/90 backdrop-blur-sm px-3 py-2 text-xs text-gray-300 shadow-xl pointer-events-none flex items-center gap-2">
-          <div className="animate-spin rounded-full h-3 w-3 border-b border-blue-400" />
-          Fetching live TLE data from CelesTrak…
+      {/* Simulation speed control */}
+      {showSatellites && satCount > 0 && (
+        <div className="absolute top-3 left-3 z-10 flex items-center gap-1 rounded-lg border border-gray-600 bg-gray-900/90 backdrop-blur-sm px-2 py-1.5 shadow-xl">
+          <span className="text-[10px] text-gray-400 mr-1 select-none">Speed</span>
+          {SPEED_OPTIONS.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setSimSpeed(opt.value)}
+              className={`px-2 py-0.5 rounded text-[10px] font-mono transition-colors ${
+                simSpeed === opt.value
+                  ? 'bg-blue-600 text-white'
+                  : 'text-gray-300 hover:bg-gray-700'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       )}
     </div>
